@@ -6,8 +6,10 @@ import numpy as np
 import torch
 import torch.optim as optim
 from torchvision import transforms
-
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 from retinanet import model
+# 加载自定义的CSVDataset数据集
 from retinanet.dataloader import CocoDataset, CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
     Normalizer
 from torch.utils.data import DataLoader
@@ -16,6 +18,7 @@ from retinanet import coco_eval
 from retinanet import csv_eval
 
 assert torch.__version__.split('.')[0] == '1'
+
 
 print('CUDA available: {}'.format(torch.cuda.is_available()))
 
@@ -66,7 +69,7 @@ def main(args=None):
     else:
         raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
 
-    sampler = AspectRatioBasedSampler(dataset_train, batch_size=2, drop_last=False)
+    sampler = AspectRatioBasedSampler(dataset_train, batch_size=10, drop_last=False)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
 
     if dataset_val is not None:
@@ -86,17 +89,30 @@ def main(args=None):
         retinanet = model.resnet152(num_classes=dataset_train.num_classes(), pretrained=True)
     else:
         raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
+################################## 调用多卡的GPU #############################################
+    try:
+        print('number of GPUs available:{}'.format(torch.cuda.device_count()))
+        print('devicename:{}'.format(torch.cuda.get_device_name(0)))
+    except:
+        print('error')
 
     use_gpu = True
+    device_ids = [0, 1, 2, 3, 4]
 
     if use_gpu:
         if torch.cuda.is_available():
             retinanet = retinanet.cuda()
 
-    if torch.cuda.is_available():
-        retinanet = torch.nn.DataParallel(retinanet).cuda()
+    if torch.cuda.is_available() and len(device_ids) >1 :
+
+        # retinanet = torch.nn.DataParallel(retinanet).cuda()
+        retinanet = torch.nn.DataParallel(retinanet, device_ids=device_ids[:])
+        print('使用了多卡模式')
     else:
         retinanet = torch.nn.DataParallel(retinanet)
+        print('使用了单卡模式')
+
+    print(retinanet)
 
     retinanet.training = True
 
@@ -122,11 +138,18 @@ def main(args=None):
             try:
                 optimizer.zero_grad()
 
+                # if torch.cuda.is_available():
+                #    classification_loss, regression_loss = retinanet([data['img'].cuda().float(), data['annot']])
+                # else:
+                #    classification_loss, regression_loss = retinanet([data['img'].float(), data['annot']])
+
                 if torch.cuda.is_available():
-                    classification_loss, regression_loss = retinanet([data['img'].cuda().float(), data['annot']])
-                else:
-                    classification_loss, regression_loss = retinanet([data['img'].float(), data['annot']])
-                    
+                    data['img'] = data['img'].cuda().float()
+                    data['annot'] = data['annot'].cuda()
+
+                # classification_loss, regression_loss = retinanet([data['img'].float(), data['annot']])
+                classification_loss, regression_loss = retinanet([data['img'], data['annot']])
+
                 classification_loss = classification_loss.mean()
                 regression_loss = regression_loss.mean()
 

@@ -78,10 +78,14 @@ class FocalLoss(nn.Module):
                     regression_losses.append(torch.tensor(0).float())
 
                 continue
-
+            # 有groundtruth直接进入到IOU里面  [76725,4]
             IoU = calc_iou(anchors[0, :, :], bbox_annotation[:, :4]) # num_anchors x num_annotations
-
+            # IOU的最大值和索引
             IoU_max, IoU_argmax = torch.max(IoU, dim=1) # num_anchors x 1
+
+            # 4/9--->测试里面的IOU_max的值
+            max_iou_value = IoU_max.max().item()
+            print("Maximum IoU value:", max_iou_value)
 
             #import pdb
             #pdb.set_trace()
@@ -97,7 +101,7 @@ class FocalLoss(nn.Module):
             positive_indices = torch.ge(IoU_max, 0.5)
 
             num_positive_anchors = positive_indices.sum()
-
+            print("此时正类样本的个数:", num_positive_anchors.item())
             assigned_annotations = bbox_annotation[IoU_argmax, :]
 
             targets[positive_indices, :] = 0
@@ -107,7 +111,7 @@ class FocalLoss(nn.Module):
                 alpha_factor = torch.ones(targets.shape).cuda() * alpha
             else:
                 alpha_factor = torch.ones(targets.shape) * alpha
-
+            # Focalloss的计算
             alpha_factor = torch.where(torch.eq(targets, 1.), alpha_factor, 1. - alpha_factor)
             focal_weight = torch.where(torch.eq(targets, 1.), 1. - classification, classification)
             focal_weight = alpha_factor * torch.pow(focal_weight, gamma)

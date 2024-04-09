@@ -7,6 +7,7 @@ from retinanet.utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
 from retinanet.anchors import Anchors
 from retinanet import losses
 
+# 将不同大小尺寸的深度学习网络架构调出来
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
     'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
@@ -17,6 +18,7 @@ model_urls = {
 
 
 class PyramidFeatures(nn.Module):
+    # 特征图的深度，特征图的通道数保持一致，即所有通道都是256，同时有利于做特征融合  ---->标准的RetinaNet的通道数
     def __init__(self, C3_size, C4_size, C5_size, feature_size=256):
         super(PyramidFeatures, self).__init__()
 
@@ -44,8 +46,10 @@ class PyramidFeatures(nn.Module):
     def forward(self, inputs):
         C3, C4, C5 = inputs
 
+        # C5经过P5-1 中间的模块Conv2d 1*1 ,kernel_size =1
         P5_x = self.P5_1(C5)
         P5_upsampled_x = self.P5_upsampled(P5_x)
+        # 在第五层 经过kernel_size=3，stride=1
         P5_x = self.P5_2(P5_x)
 
         P4_x = self.P4_1(C4)
@@ -64,7 +68,7 @@ class PyramidFeatures(nn.Module):
 
         return [P3_x, P4_x, P5_x, P6_x, P7_x]
 
-
+# 回归类
 class RegressionModel(nn.Module):
     def __init__(self, num_features_in, num_anchors=9, feature_size=256):
         super(RegressionModel, self).__init__()
@@ -123,6 +127,7 @@ class ClassificationModel(nn.Module):
         self.conv4 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
         self.act4 = nn.ReLU()
 
+        # 注意最后输出的维度是 W*H*KA  (K是类别的个数，A是anchor的个数)
         self.output = nn.Conv2d(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
         self.output_act = nn.Sigmoid()
 
@@ -142,11 +147,11 @@ class ClassificationModel(nn.Module):
         out = self.output(out)
         out = self.output_act(out)
 
-        # out is B x C x W x H, with C = n_classes + n_anchors
+        # out is B x C x W x H, with C = n_classes + n_anchors  permute操作更改里面的位置
         out1 = out.permute(0, 2, 3, 1)
 
         batch_size, width, height, channels = out1.shape
-
+        # view操作 将里面的乘法给拆开
         out2 = out1.view(batch_size, width, height, self.num_anchors, self.num_classes)
 
         return out2.contiguous().view(x.shape[0], -1, self.num_classes)
@@ -155,6 +160,7 @@ class ClassificationModel(nn.Module):
 class ResNet(nn.Module):
 
     def __init__(self, num_classes, block, layers):
+        # 如果是Resnet50,构建网络整体的架构
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -181,7 +187,7 @@ class ResNet(nn.Module):
         self.classificationModel = ClassificationModel(256, num_classes=num_classes)
 
         self.anchors = Anchors()
-
+        # anchor和里面的调节的参数
         self.regressBoxes = BBoxTransform()
 
         self.clipBoxes = ClipBoxes()

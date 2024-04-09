@@ -155,7 +155,7 @@ def evaluate(
     iou_threshold=0.5,
     score_threshold=0.05,
     max_detections=100,
-    save_path=None
+    save_path='D:/pytorch-retinanet/result'
 ):
     """ Evaluate a given dataset using a given retinanet.
     # Arguments
@@ -233,8 +233,8 @@ def evaluate(
         average_precisions[label] = average_precision, num_annotations
 
 
-    print('\nmAP:')
-    for label in range(generator.num_classes()):
+    # print('\nmAP:')
+    # for label in range(generator.num_classes()):
         label_name = generator.label_to_name(label)
         print('{}: {}'.format(label_name, average_precisions[label][0]))
         print("Precision: ",precision[-1])
